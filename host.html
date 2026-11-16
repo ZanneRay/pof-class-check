@@ -47,6 +47,7 @@ th{color:var(--mute);font-weight:600;font-size:.85em;text-transform:uppercase;le
 .pct{font-weight:800;white-space:nowrap}
 .warn-n{color:var(--mute);font-size:.8em}
 .err{color:var(--bad);font-weight:700}
+.expl{margin-top:1em;padding:.7em 1em;background:var(--sand);border-left:6px solid var(--olive);border-radius:6px;font-size:1em;line-height:1.35;max-width:70em}
 .kbd{font-size:.7em;color:var(--mute)}
 </style>
 </head>
@@ -60,8 +61,8 @@ th{color:var(--mute);font-weight:600;font-size:.85em;text-transform:uppercase;le
   <div class="grid2">
     <div class="card">
       <h2 style="margin-top:0">1 · Question bank</h2>
-      <div class="row"><input type="file" id="file" accept=".csv,text/csv"><span id="bankInfo" class="mute"></span></div>
-      <div class="mute" style="font-size:.75em">CSV with columns id, pool, category, chapter, question, A, B, C, D, correct, explanation. The bank stays on this computer; only the questions you play are sent to the room.</div>
+      <div class="row"><input type="file" id="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"><span id="bankInfo" class="mute"></span></div>
+      <div class="mute" style="font-size:.75em">POF_Question_Bank_2026.xlsx (sheet Questions) or a CSV with columns ID, Module or Category, Chapter, Question, A, B, C, D, Correct, Explanation. The bank stays on this computer; only the questions you play are sent to the room.</div>
       <h2>2 · Selection</h2>
       <div class="row"><label><input type="radio" name="by" value="pool" checked> by question pool</label><label><input type="radio" name="by" value="category"> by category</label></div>
       <div id="picks" class="chips"></div>
@@ -72,6 +73,7 @@ th{color:var(--mute);font-weight:600;font-size:.85em;text-transform:uppercase;le
       <div class="row">Time per question <select id="tl"><option>20</option><option selected>30</option><option>45</option><option>60</option><option value="0">no timer</option></select> s</div>
       <div class="row"><label><input type="checkbox" id="spread" checked> spread evenly over the selected categories</label></div>
       <div class="row"><label><input type="checkbox" id="shuf" checked> shuffle answer order</label></div>
+      <div class="row hidden" id="examRow"><label><input type="checkbox" id="noExam" checked> leave out the <b id="nExam"></b> questions marked X for the exam</label></div>
       <p class="mute" style="font-size:.75em">No names are collected. Phones sign in anonymously; the room only stores how many students chose each answer. Delete the room at the end.</p>
       <div class="row"><button class="btn" id="create" disabled>Open room</button><span id="setupErr" class="err"></span></div>
     </div>
@@ -94,6 +96,7 @@ th{color:var(--mute);font-weight:600;font-size:.85em;text-transform:uppercase;le
   <div class="timer" id="timerWrap"><div id="timer"></div></div>
   <div class="qtext" id="qtext"></div>
   <div class="opts" id="opts"></div>
+  <div class="expl hidden" id="qexpl"></div>
   <div class="foot"><span id="qsum" class="big"></span><span class="sp"></span><span class="kbd">Space = next</span><button class="btn" id="next">Next ▸</button></div>
 </section>
 
@@ -116,6 +119,7 @@ th{color:var(--mute);font-weight:600;font-size:.85em;text-transform:uppercase;le
 
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script src="backend.js"></script>
 <script>
@@ -125,8 +129,8 @@ const L = ["A","B","C","D"];
 let bank = [], uid = null, room = null, quiz = [], qi = -1, phase = "", answers = {}, joined = 0, unsubA = null, tick = null, deadline = 0;
 const results = []; // per played question
 
-// ---------- CSV ----------
-function parseCSV(text){
+// ---------- Question bank (CSV or XLSX) ----------
+function csvRows(text){
   text = text.replace(/^﻿/, "");
   const first = text.split(/\r?\n/)[0];
   const d = (first.split(";").length > first.split(",").length) ? ";" : ",";
@@ -140,25 +144,46 @@ function parseCSV(text){
     else f += c;
   }
   if (f.length || row.length){ row.push(f); rows.push(row); }
-  const h = rows.shift().map(s => s.trim().toLowerCase());
-  const need = ["question","a","b","c","d","correct","category"];
-  const miss = need.filter(n => !h.includes(n));
+  return rows;
+}
+function xlsxRows(buf){
+  const wb = XLSX.read(buf, { type: "array" });
+  const isBank = (n) => { const r = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: "" })[0] || []; const h = r.map(x => String(x).trim().toLowerCase()); return h.includes("question") && h.includes("correct"); };
+  const name = wb.SheetNames.find(n => n.toLowerCase() === "questions" && isBank(n)) || wb.SheetNames.find(isBank);
+  if (!name) throw new Error("No sheet with 'Question' and 'Correct' columns found.");
+  return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: false });
+}
+function mapRows(rows){
+  const h = rows.shift().map(s => String(s).trim().toLowerCase());
+  const col = (...names) => { for (const n of names){ const i = h.indexOf(n); if (i >= 0) return i; } return -1; };
+  const C = { id: col("id"), cat: col("category","module"), pool: col("pool","module","category"), ch: col("chapter"), q: col("question"),
+    a: col("a"), b: col("b"), c: col("c"), d: col("d"), ok: col("correct"), ex: col("explanation"), sel: col("select (x)","select","exam") };
+  const miss = Object.entries({ question: C.q, A: C.a, B: C.b, C: C.c, D: C.d, correct: C.ok, "category/module": C.cat }).filter(([, v]) => v < 0).map(([k]) => k);
   if (miss.length) throw new Error("Missing column(s): " + miss.join(", "));
-  return rows.filter(r => r.some(x => x.trim())).map((r, i) => {
-    const o = {}; h.forEach((k, j) => o[k] = (r[j] || "").trim());
-    const ci = L.indexOf(o.correct.toUpperCase());
-    if (ci < 0) throw new Error(`Row ${i+2}: 'correct' must be A, B, C or D`);
-    return { id: o.id || ("Q" + (i+1)), pool: o.pool || "—", category: o.category, chapter: o.chapter || "", question: o.question, opts: [o.a,o.b,o.c,o.d], correct: ci, explanation: o.explanation || "" };
+  const g = (r, i) => i < 0 ? "" : String(r[i] ?? "").trim();
+  return rows.filter(r => g(r, C.q)).map((r, i) => {
+    const ci = L.indexOf(g(r, C.ok).toUpperCase());
+    if (ci < 0) throw new Error(`Row ${i+2}: 'Correct' must be A, B, C or D`);
+    return { id: g(r, C.id) || ("Q" + (i+1)), pool: g(r, C.pool) || "—", category: g(r, C.cat), chapter: g(r, C.ch), question: g(r, C.q),
+      opts: [g(r, C.a), g(r, C.b), g(r, C.c), g(r, C.d)], correct: ci, explanation: g(r, C.ex), exam: /^x$/i.test(g(r, C.sel)) };
   });
 }
-function loadBank(text, name){
-  try { bank = parseCSV(text); } catch(e){ $("bankInfo").textContent = ""; $("setupErr").textContent = e.message; return; }
-  $("setupErr").textContent = "";
+function setBank(b, name){
+  bank = b; $("setupErr").textContent = "";
+  const nx = bank.filter(q => q.exam).length;
   $("bankInfo").textContent = `${bank.length} questions · ${name}`;
-  try { localStorage.setItem("pofcc-bank", text); localStorage.setItem("pofcc-bank-name", name); } catch {}
+  $("examRow").classList.toggle("hidden", !nx); $("nExam").textContent = nx;
+  try { localStorage.setItem("pofcc-bank-json", JSON.stringify(bank)); localStorage.setItem("pofcc-bank-name", name); } catch {}
   renderPicks();
 }
-$("file").onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => loadBank(t, f.name)); };
+async function loadFile(f){
+  try {
+    const rows = /\.xlsx?$/i.test(f.name) ? xlsxRows(await f.arrayBuffer()) : csvRows(await f.text());
+    setBank(mapRows(rows), f.name);
+  } catch(e){ $("bankInfo").textContent = ""; $("setupErr").textContent = e.message; }
+}
+$("file").onchange = (e) => { const f = e.target.files[0]; if (f) loadFile(f); };
+$("noExam").onchange = updAvail;
 document.querySelectorAll("input[name=by]").forEach(r => r.onchange = renderPicks);
 function by(){ return document.querySelector("input[name=by]:checked").value; }
 function renderPicks(){
@@ -166,7 +191,7 @@ function renderPicks(){
   $("picks").innerHTML = vals.map(v => `<label class="chip"><input type="checkbox" value="${esc(v)}">${esc(v)} <span class="mute">(${bank.filter(q => q[k] === v).length})</span></label>`).join("");
   $("picks").querySelectorAll("input").forEach(i => i.onchange = updAvail); updAvail();
 }
-function selected(){ const k = by(); const on = [...$("picks").querySelectorAll("input:checked")].map(i => i.value); return bank.filter(q => on.includes(q[k])); }
+function selected(){ const k = by(); const on = [...$("picks").querySelectorAll("input:checked")].map(i => i.value); const ne = $("noExam").checked; return bank.filter(q => on.includes(q[k]) && !(ne && q.exam)); }
 function updAvail(){ const n = selected().length; $("avail").textContent = `of ${n} selected`; $("create").disabled = n === 0; }
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function shuffle(a){ a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -217,7 +242,7 @@ async function nextQ(){
   $("qnum").textContent = `Question ${qi+1} / ${quiz.length}`; $("qcat").textContent = q.category + (q.chapter ? ` · ch ${q.chapter}` : "");
   $("qtext").textContent = q.question;
   $("opts").innerHTML = q.shown.map((o, i) => `<div class="opt opt-${L[i].toLowerCase()}"><div class="bar"></div><span class="letter">${L[i]}</span><span class="txt">${esc(o)}</span><span class="cnt"></span></div>`).join("");
-  $("qsum").textContent = ""; $("next").textContent = "Close ▸";
+  $("qsum").textContent = ""; $("qexpl").classList.add("hidden"); $("next").textContent = "Close ▸";
   show("play");
   clearInterval(tick); $("timerWrap").classList.toggle("hidden", !tl);
   if (tl){ deadline = Date.now() + tl * 1000; tick = setInterval(() => { const r = Math.max(0, deadline - Date.now()); $("timer").style.width = (100 * r / (tl * 1000)) + "%"; if (r <= 0) closeQ(); }, 200); }
@@ -233,7 +258,7 @@ async function closeQ(){
   if (phase !== "question") return;
   phase = "reveal"; clearInterval(tick);
   const q = quiz[qi];
-  await Backend.update("rooms/" + room + "/state", { phase: "reveal", correct: q.shownCorrect });
+  await Backend.update("rooms/" + room + "/state", { phase: "reveal", correct: q.shownCorrect, expl: q.explanation || "" });
   const c = counts(), n = c.reduce((a, b) => a + b, 0);
   [...$("opts").children].forEach((el, i) => {
     el.querySelector(".bar").style.width = n ? (100 * c[i] / n) + "%" : "0";
@@ -242,6 +267,7 @@ async function closeQ(){
   });
   const pc = n ? Math.round(100 * c[q.shownCorrect] / n) : 0;
   $("qsum").innerHTML = n ? `<b>${pc}%</b> correct · ${n} answers` : "No answers";
+  $("qexpl").textContent = q.explanation || ""; $("qexpl").classList.toggle("hidden", !q.explanation);
   // store per question, in ORIGINAL answer letters
   const orig = [0,0,0,0]; q.order.forEach((o, i) => orig[o] = c[i]);
   results.push({ id: q.id, pool: q.pool, category: q.category, chapter: q.chapter, question: q.question, opts: q.opts, correct: q.correct, counts: orig, n });
@@ -283,7 +309,7 @@ $("again").onclick = () => { room = null; $("hdrRoom").textContent = ""; $("del"
 
 // ---------- start ----------
 $("hdrMode").textContent = Backend.mode === "mock" ? "TEST MODE (this computer only)" : "";
-try { const t = localStorage.getItem("pofcc-bank"); if (t) loadBank(t, localStorage.getItem("pofcc-bank-name") || "saved bank"); } catch {}
+try { const t = localStorage.getItem("pofcc-bank-json"); if (t) setBank(JSON.parse(t), localStorage.getItem("pofcc-bank-name") || "saved bank"); } catch {}
 </script>
 </body>
 </html>

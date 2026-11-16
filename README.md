@@ -9,7 +9,7 @@ Static web app (GitHub Pages) + Firebase Realtime Database (free Spark plan).
 - `config.js` – Firebase web config (fill in once).
 - `database.rules.json` – security rules (paste into Firebase console).
 
-The question bank (CSV) is **not** in this repo: the instructor loads it on the host screen; only the questions played are sent to the room.
+The question bank is **not** in this repo: the instructor loads `POF_Question_Bank_2026.xlsx` (Nextcloud › BA Aerodynamics › Vragenbank, sheet *Questions*) or a CSV on the host screen; only the questions played are sent to the room. Categories = the Module column (Moodle categories). Questions marked X in *Select (X)* (exam selection) are left out by default. The Explanation column is shown after each question on the beamer and on the phones.
 
 ## One-time setup
 
@@ -27,7 +27,7 @@ Test without Firebase: open `host.html?mock=1` and `index.html?mock=1&r=<code>` 
 
 ## In class
 
-Open `host.html` → choose bank CSV (remembered next time) → pick pools or categories → number of questions → **Open room** →
+Open `host.html` → choose the bank XLSX/CSV (remembered next time) → pick pools or categories → number of questions → **Open room** →
 students scan QR → **Start** → Space/Next per question (auto-closes when all have answered or the timer ends) →
 results → **Export CSV** → **Close room & delete data**.
 

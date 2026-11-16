@@ -26,6 +26,7 @@ input.code{font:inherit;font-size:2.2em;letter-spacing:.2em;text-align:center;wi
 .dot{width:12px;height:12px;border-radius:50%;background:var(--olive);animation:p 1.2s infinite}
 @keyframes p{50%{opacity:.25}}
 small{color:var(--mute)}
+.ex{margin-top:.8em;background:#fff;border-left:5px solid var(--olive);border-radius:8px;padding:.7em .9em;font-size:.92em;line-height:1.35}
 </style>
 </head>
 <body>
@@ -44,6 +45,7 @@ small{color:var(--mute)}
     <div class="q" id="q"></div>
     <div class="ans" id="ans"></div>
     <div class="status" id="st"></div>
+    <div class="ex hidden" id="ex"></div>
   </section>
   <section id="end" class="center hidden">
     <div style="font-size:1.3em;font-weight:700">Done — thank you</div>
@@ -89,7 +91,7 @@ function onState(s){
     $("ans").className = "ans";
     $("ans").innerHTML = s.q.opts.map((o, i) => `<button class="opt-${L[i].toLowerCase()}" data-i="${i}"><span class="letter">${L[i]}</span><span>${esc(o)}</span></button>`).join("");
     $("ans").querySelectorAll("button").forEach(b => b.onclick = () => pick(+b.dataset.i));
-    $("st").textContent = ""; show("play");
+    $("st").textContent = ""; $("ex").classList.add("hidden"); show("play");
     Backend.once(`rooms/${room}/answers/${cur}/${uid}`).then(v => { if (v != null && picked == null) mark(v); });
   }
   if (s.phase === "question" && picked == null) $("st").textContent = "";
@@ -104,6 +106,7 @@ function onState(s){
     }
     $("st").innerHTML = picked == null ? `<span class="badc">No answer given.</span> Correct: ${L[s.correct]}`
       : picked === s.correct ? `<span class="good">✓ Correct</span>` : `<span class="badc">✗ Not correct</span> — correct: ${L[s.correct]}`;
+    $("ex").textContent = s.expl || ""; $("ex").classList.toggle("hidden", !s.expl);
   }
 }
 function mark(i){ picked = i; $("ans").classList.add("locked"); $("ans").querySelectorAll("button").forEach((b, j) => { b.classList.toggle("picked", j === i); b.disabled = true; }); $("st").textContent = "Answer received"; }
