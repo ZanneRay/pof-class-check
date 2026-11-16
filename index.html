@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2B371D">
+<title>PoF Class Check</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body{font-size:17px;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;background:var(--sand)}
+header{background:var(--dark);color:#fff;padding:.7em 1em;display:flex;justify-content:space-between;font-size:.85em}
+header b{letter-spacing:.06em}
+main{flex:1;padding:1em;display:flex;flex-direction:column;max-width:640px;width:100%;margin:0 auto}
+.center{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:.8em}
+input.code{font:inherit;font-size:2.2em;letter-spacing:.2em;text-align:center;width:7em;padding:.2em;border:2px solid var(--line);border-radius:10px}
+.meta{color:var(--mute);font-size:.8em;text-transform:uppercase;letter-spacing:.05em}
+.q{font-size:1.15em;font-weight:700;line-height:1.3;margin:.4em 0 1em}
+.ans{display:flex;flex-direction:column;gap:.6em}
+.ans button{display:flex;gap:.7em;align-items:center;text-align:left;border:0;border-left:10px solid var(--c1);background:#fff;border-radius:10px;padding:.85em .9em;font-size:1em;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08);min-height:3.6em}
+.ans button:active{transform:scale(.99)}
+.ans button.picked{outline:3px solid var(--c1)}
+.ans.locked button:not(.picked){opacity:.4}
+.ans button.right{outline:3px solid var(--good);opacity:1!important}
+.status{margin-top:1em;text-align:center;font-weight:700;min-height:1.6em}
+.good{color:var(--good)}.badc{color:var(--bad)}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--olive);animation:p 1.2s infinite}
+@keyframes p{50%{opacity:.25}}
+small{color:var(--mute)}
+</style>
+</head>
+<body>
+<header><b>PoF CLASS CHECK</b><span id="hdr"></span></header>
+<main>
+  <section id="join" class="center">
+    <div style="font-size:1.2em;font-weight:700">Enter the room code</div>
+    <input class="code" id="code" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off">
+    <button class="btn" id="joinBtn">Join</button>
+    <div id="err" class="badc"></div>
+    <small>Anonymous: no name, no account. Only your answer choice is sent.</small>
+  </section>
+  <section id="wait" class="center hidden"><div class="dot"></div><div id="waitMsg">You're in. Wait for the first question.</div></section>
+  <section id="play" class="hidden">
+    <div class="meta" id="meta"></div>
+    <div class="q" id="q"></div>
+    <div class="ans" id="ans"></div>
+    <div class="status" id="st"></div>
+  </section>
+  <section id="end" class="center hidden">
+    <div style="font-size:1.3em;font-weight:700">Done — thank you</div>
+    <div id="mine"></div>
+    <small>Your score is shown only on this phone and is not stored.</small>
+  </section>
+</main>
+<script src="config.js"></script>
+<script src="backend.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (id) => ["join","wait","play","end"].forEach(s => $(s).classList.toggle("hidden", s !== id));
+const L = ["A","B","C","D"];
+let uid, room, cur = -1, picked = null, score = 0, answered = 0, counted = new Set();
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function join(code){
+  $("err").textContent = "";
+  code = (code || "").trim();
+  if (!/^\d{5}$/.test(code)) { $("err").textContent = "The code has 5 digits."; return; }
+  $("joinBtn").disabled = true;
+  try {
+    uid ||= await Backend.init();
+    const owner = await Backend.once("rooms/" + code + "/owner");
+    if (!owner) { $("err").textContent = "Room not found."; $("joinBtn").disabled = false; return; }
+    room = code;
+    await Backend.set(`rooms/${room}/joined/${uid}`, true);
+  } catch(e){ $("err").textContent = "Could not connect: " + e.message; $("joinBtn").disabled = false; return; }
+  $("hdr").textContent = "Room " + room;
+  try { sessionStorage.setItem("pofcc-room", room); } catch {}
+  show("wait");
+  Backend.on(`rooms/${room}/state`, onState);
+}
+
+function onState(s){
+  if (!s) { $("waitMsg").textContent = "The room was closed."; show("wait"); return; }
+  if (s.phase === "lobby") { show("wait"); return; }
+  if (s.phase === "end") { $("mine").innerHTML = answered ? `You had <b>${score} of ${answered}</b> correct.` : ""; show("end"); return; }
+  if (s.qi !== cur) { // new question
+    cur = s.qi; picked = null;
+    $("meta").textContent = `Question ${s.qi + 1} / ${s.total} · ${s.q.cat}`;
+    $("q").textContent = s.q.text;
+    $("ans").className = "ans";
+    $("ans").innerHTML = s.q.opts.map((o, i) => `<button class="opt-${L[i].toLowerCase()}" data-i="${i}"><span class="letter">${L[i]}</span><span>${esc(o)}</span></button>`).join("");
+    $("ans").querySelectorAll("button").forEach(b => b.onclick = () => pick(+b.dataset.i));
+    $("st").textContent = ""; show("play");
+    Backend.once(`rooms/${room}/answers/${cur}/${uid}`).then(v => { if (v != null && picked == null) mark(v); });
+  }
+  if (s.phase === "question" && picked == null) $("st").textContent = "";
+  if (s.phase === "reveal") {
+    $("ans").classList.add("locked");
+    const btns = $("ans").querySelectorAll("button");
+    btns.forEach(b => b.disabled = true);
+    if (btns[s.correct]) btns[s.correct].classList.add("right");
+    if (!counted.has(cur)) {
+      counted.add(cur);
+      if (picked != null) { answered++; if (picked === s.correct) score++; }
+    }
+    $("st").innerHTML = picked == null ? `<span class="badc">No answer given.</span> Correct: ${L[s.correct]}`
+      : picked === s.correct ? `<span class="good">✓ Correct</span>` : `<span class="badc">✗ Not correct</span> — correct: ${L[s.correct]}`;
+  }
+}
+function mark(i){ picked = i; $("ans").classList.add("locked"); $("ans").querySelectorAll("button").forEach((b, j) => { b.classList.toggle("picked", j === i); b.disabled = true; }); $("st").textContent = "Answer received"; }
+async function pick(i){
+  if (picked != null) return;
+  mark(i);
+  try { await Backend.set(`rooms/${room}/answers/${cur}/${uid}`, i); }
+  catch(e){ picked = null; $("ans").classList.remove("locked"); $("ans").querySelectorAll("button").forEach(b => { b.disabled = false; b.classList.remove("picked"); }); $("st").innerHTML = `<span class="badc">Too late — answers are closed.</span>`; }
+}
+
+$("joinBtn").onclick = () => join($("code").value);
+$("code").addEventListener("keydown", e => { if (e.key === "Enter") join($("code").value); });
+const p = new URLSearchParams(location.search).get("r");
+if (p) { $("code").value = p; join(p); }
+</script>
+</body>
+</html>

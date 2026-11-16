@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PoF Class Check — Instructor</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body{font-size:20px;display:flex;flex-direction:column;min-height:100vh}
+header{background:var(--dark);color:#fff;display:flex;align-items:center;gap:1.2em;padding:.5em 1.2em;font-size:.85em}
+header b{letter-spacing:.06em}
+header .sp{flex:1}
+main{flex:1;padding:1.4em 2.2em;display:flex;flex-direction:column}
+h1{font-size:1.6em;margin:.2em 0 .6em}
+h2{font-size:1.05em;margin:1.2em 0 .5em;color:var(--olive);text-transform:uppercase;letter-spacing:.05em}
+.card{border:1px solid var(--line);border-radius:10px;padding:1em 1.2em;background:#fff}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.4em}
+.chips{display:flex;flex-wrap:wrap;gap:.4em}
+.chip{border:1px solid var(--line);border-radius:999px;padding:.25em .8em;font-size:.8em;background:var(--sand);user-select:none}
+.chip input{margin-right:.35em}
+.row{display:flex;gap:1em;align-items:center;flex-wrap:wrap;margin:.5em 0}
+select,input[type=number]{font:inherit;font-size:.9em;padding:.3em .5em;border:1px solid var(--line);border-radius:6px}
+#lobby{align-items:center;text-align:center}
+#qrbox{background:#fff;padding:14px;border:1px solid var(--line);border-radius:12px;display:inline-block}
+.code{font-size:4.2em;font-weight:800;letter-spacing:.12em;color:var(--olive);margin:.1em 0}
+.big{font-size:1.4em}
+.qmeta{display:flex;gap:1em;align-items:center;color:var(--mute);font-size:.85em;text-transform:uppercase;letter-spacing:.05em}
+.qtext{font-size:1.75em;font-weight:700;line-height:1.25;margin:.4em 0 .8em;max-width:62em}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:.8em}
+.opt{display:flex;gap:.7em;align-items:flex-start;border:2px solid var(--line);border-left:10px solid var(--c1);border-radius:10px;padding:.7em .9em;font-size:1.1em;position:relative;overflow:hidden;min-height:3.4em}
+.opt .bar{position:absolute;left:0;top:0;bottom:0;background:var(--c1);opacity:.13;width:0;transition:width .6s}
+.opt .txt{position:relative;flex:1}
+.opt .cnt{position:relative;font-weight:800;min-width:4.5em;text-align:right}
+.opt.correct{border-color:var(--good);box-shadow:0 0 0 3px var(--good) inset}
+.opt.correct .txt::after{content:"  ✓";color:var(--good);font-weight:800}
+.opt.dim{opacity:.55}
+.timer{height:10px;background:var(--light);border-radius:6px;overflow:hidden;margin:.6em 0 1em}
+.timer>div{height:100%;background:var(--olive);width:100%;transition:width .25s linear}
+.foot{display:flex;gap:1em;align-items:center;margin-top:auto;padding-top:1em}
+.foot .sp{flex:1}
+table{border-collapse:collapse;width:100%;font-size:.85em}
+td,th{padding:.4em .5em;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
+.pbar{height:.75em;background:var(--light);border-radius:4px;overflow:hidden;min-width:8em}
+.pbar>div{height:100%}
+.lvl-low{background:var(--bad)}.lvl-mid{background:#C98A1B}.lvl-high{background:var(--good)}
+.pct{font-weight:800;white-space:nowrap}
+.warn-n{color:var(--mute);font-size:.8em}
+.err{color:var(--bad);font-weight:700}
+.kbd{font-size:.7em;color:var(--mute)}
+</style>
+</head>
+<body>
+<header><b>PoF CLASS CHECK</b><span>082 Principles of Flight · IHTC</span><span class="sp"></span><span id="hdrRoom"></span><span id="hdrMode" class="mute"></span></header>
+<main>
+
+<!-- SETUP -->
+<section id="setup">
+  <h1>New class check</h1>
+  <div class="grid2">
+    <div class="card">
+      <h2 style="margin-top:0">1 · Question bank</h2>
+      <div class="row"><input type="file" id="file" accept=".csv,text/csv"><span id="bankInfo" class="mute"></span></div>
+      <div class="mute" style="font-size:.75em">CSV with columns id, pool, category, chapter, question, A, B, C, D, correct, explanation. The bank stays on this computer; only the questions you play are sent to the room.</div>
+      <h2>2 · Selection</h2>
+      <div class="row"><label><input type="radio" name="by" value="pool" checked> by question pool</label><label><input type="radio" name="by" value="category"> by category</label></div>
+      <div id="picks" class="chips"></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">3 · Settings</h2>
+      <div class="row">Questions <input type="number" id="nq" min="1" max="60" value="10" style="width:5em"> <span id="avail" class="mute"></span></div>
+      <div class="row">Time per question <select id="tl"><option>20</option><option selected>30</option><option>45</option><option>60</option><option value="0">no timer</option></select> s</div>
+      <div class="row"><label><input type="checkbox" id="spread" checked> spread evenly over the selected categories</label></div>
+      <div class="row"><label><input type="checkbox" id="shuf" checked> shuffle answer order</label></div>
+      <p class="mute" style="font-size:.75em">No names are collected. Phones sign in anonymously; the room only stores how many students chose each answer. Delete the room at the end.</p>
+      <div class="row"><button class="btn" id="create" disabled>Open room</button><span id="setupErr" class="err"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- LOBBY -->
+<section id="lobby" class="hidden" style="display:flex;flex-direction:column">
+  <h1>Scan to join — no name needed</h1>
+  <div id="qrbox"><div id="qr"></div></div>
+  <div class="mute" id="joinUrl" style="margin-top:.6em;font-size:.8em"></div>
+  <div class="code" id="code"></div>
+  <div class="big"><b id="nJoined">0</b> joined</div>
+  <div class="foot" style="width:100%"><span class="sp"></span><button class="btn" id="go">Start ▸</button></div>
+</section>
+
+<!-- QUESTION / REVEAL -->
+<section id="play" class="hidden" style="flex:1;display:flex;flex-direction:column">
+  <div class="qmeta"><span id="qnum"></span><span>·</span><span id="qcat"></span><span class="sp" style="flex:1"></span><span id="qans"></span></div>
+  <div class="timer" id="timerWrap"><div id="timer"></div></div>
+  <div class="qtext" id="qtext"></div>
+  <div class="opts" id="opts"></div>
+  <div class="foot"><span id="qsum" class="big"></span><span class="sp"></span><span class="kbd">Space = next</span><button class="btn" id="next">Next ▸</button></div>
+</section>
+
+<!-- RESULTS -->
+<section id="results" class="hidden">
+  <h1>Class result <span id="overall" class="pct"></span></h1>
+  <div class="grid2">
+    <div>
+      <h2 style="margin-top:0">By category — weakest first</h2>
+      <table id="catTable"></table>
+      <p class="warn-n">Percent of all answers given in that category. Categories with one question are indicative only.</p>
+    </div>
+    <div>
+      <h2 style="margin-top:0">Most-missed questions</h2>
+      <table id="missTable"></table>
+    </div>
+  </div>
+  <div class="foot"><button class="btn ghost" id="csv">Export CSV</button><span class="sp"></span><button class="btn warn" id="del">Close room &amp; delete data</button><button class="btn ghost" id="again">New check</button></div>
+</section>
+
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="config.js"></script>
+<script src="backend.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (id) => ["setup","lobby","play","results"].forEach(s => $(s).classList.toggle("hidden", s !== id));
+const L = ["A","B","C","D"];
+let bank = [], uid = null, room = null, quiz = [], qi = -1, phase = "", answers = {}, joined = 0, unsubA = null, tick = null, deadline = 0;
+const results = []; // per played question
+
+// ---------- CSV ----------
+function parseCSV(text){
+  text = text.replace(/^﻿/, "");
+  const first = text.split(/\r?\n/)[0];
+  const d = (first.split(";").length > first.split(",").length) ? ";" : ",";
+  const rows = []; let row = [], f = "", q = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (q){ if (c === '"'){ if (text[i+1] === '"'){ f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === d){ row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r"){ if (c === "\r" && text[i+1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
+    else f += c;
+  }
+  if (f.length || row.length){ row.push(f); rows.push(row); }
+  const h = rows.shift().map(s => s.trim().toLowerCase());
+  const need = ["question","a","b","c","d","correct","category"];
+  const miss = need.filter(n => !h.includes(n));
+  if (miss.length) throw new Error("Missing column(s): " + miss.join(", "));
+  return rows.filter(r => r.some(x => x.trim())).map((r, i) => {
+    const o = {}; h.forEach((k, j) => o[k] = (r[j] || "").trim());
+    const ci = L.indexOf(o.correct.toUpperCase());
+    if (ci < 0) throw new Error(`Row ${i+2}: 'correct' must be A, B, C or D`);
+    return { id: o.id || ("Q" + (i+1)), pool: o.pool || "—", category: o.category, chapter: o.chapter || "", question: o.question, opts: [o.a,o.b,o.c,o.d], correct: ci, explanation: o.explanation || "" };
+  });
+}
+function loadBank(text, name){
+  try { bank = parseCSV(text); } catch(e){ $("bankInfo").textContent = ""; $("setupErr").textContent = e.message; return; }
+  $("setupErr").textContent = "";
+  $("bankInfo").textContent = `${bank.length} questions · ${name}`;
+  try { localStorage.setItem("pofcc-bank", text); localStorage.setItem("pofcc-bank-name", name); } catch {}
+  renderPicks();
+}
+$("file").onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => loadBank(t, f.name)); };
+document.querySelectorAll("input[name=by]").forEach(r => r.onchange = renderPicks);
+function by(){ return document.querySelector("input[name=by]:checked").value; }
+function renderPicks(){
+  const k = by(); const vals = [...new Set(bank.map(q => q[k]))];
+  $("picks").innerHTML = vals.map(v => `<label class="chip"><input type="checkbox" value="${esc(v)}">${esc(v)} <span class="mute">(${bank.filter(q => q[k] === v).length})</span></label>`).join("");
+  $("picks").querySelectorAll("input").forEach(i => i.onchange = updAvail); updAvail();
+}
+function selected(){ const k = by(); const on = [...$("picks").querySelectorAll("input:checked")].map(i => i.value); return bank.filter(q => on.includes(q[k])); }
+function updAvail(){ const n = selected().length; $("avail").textContent = `of ${n} selected`; $("create").disabled = n === 0; }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function shuffle(a){ a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function buildQuiz(){
+  const pool = selected(); let n = Math.min(+$("nq").value || 10, pool.length);
+  let pick;
+  if ($("spread").checked){ // round-robin over categories so every category gets evidence
+    const byCat = {}; shuffle(pool).forEach(q => (byCat[q.category] ||= []).push(q));
+    const cats = shuffle(Object.keys(byCat)); pick = [];
+    while (pick.length < n){ for (const c of cats){ if (byCat[c].length && pick.length < n) pick.push(byCat[c].shift()); } }
+    pick = shuffle(pick);
+  } else pick = shuffle(pool).slice(0, n);
+  return pick.map(q => {
+    const order = $("shuf").checked ? shuffle([0,1,2,3]) : [0,1,2,3];
+    return { ...q, order, shown: order.map(i => q.opts[i]), shownCorrect: order.indexOf(q.correct) };
+  });
+}
+
+// ---------- Room ----------
+$("create").onclick = async () => {
+  $("setupErr").textContent = ""; $("create").disabled = true;
+  try {
+    uid ||= await Backend.init();
+    quiz = buildQuiz(); results.length = 0; qi = -1;
+    for (let t = 0; t < 8; t++){ const c = String(Math.floor(10000 + Math.random() * 90000)); if (!(await Backend.once("rooms/" + c + "/owner"))){ room = c; break; } }
+    await Backend.update("rooms/" + room, { owner: uid, created: Date.now(), state: { phase: "lobby", total: quiz.length } });
+  } catch(e){ $("setupErr").textContent = "Could not open room: " + e.message; $("create").disabled = false; return; }
+  const url = new URL("index.html", location.href); url.search = (Backend.mode === "mock" ? "mock=1&" : "") + "r=" + room;
+  $("qr").innerHTML = ""; new QRCode($("qr"), { text: url.href, width: 300, height: 300, correctLevel: QRCode.CorrectLevel.M });
+  $("joinUrl").textContent = url.host + url.pathname.replace(/index\.html$/, "") + "  ·  code";
+  $("code").textContent = room; $("hdrRoom").textContent = "Room " + room;
+  Backend.on("rooms/" + room + "/joined", v => { joined = v ? Object.keys(v).length : 0; $("nJoined").textContent = joined; updAns(); });
+  show("lobby");
+};
+$("go").onclick = () => nextQ();
+
+async function nextQ(){
+  if (phase === "question") return closeQ();
+  qi++;
+  if (qi >= quiz.length) return finish();
+  if (unsubA) { unsubA(); unsubA = null; }
+  const q = quiz[qi]; answers = {}; phase = "question";
+  const tl = +$("tl").value;
+  await Backend.set("rooms/" + room + "/state", { phase: "question", qi, qk: String(qi), total: quiz.length, q: { text: q.question, opts: q.shown, cat: q.category } });
+  const myQ = qi;
+  unsubA = Backend.on(`rooms/${room}/answers/${myQ}`, v => { if (myQ !== qi) return; answers = v || {}; updAns(); });
+  $("qnum").textContent = `Question ${qi+1} / ${quiz.length}`; $("qcat").textContent = q.category + (q.chapter ? ` · ch ${q.chapter}` : "");
+  $("qtext").textContent = q.question;
+  $("opts").innerHTML = q.shown.map((o, i) => `<div class="opt opt-${L[i].toLowerCase()}"><div class="bar"></div><span class="letter">${L[i]}</span><span class="txt">${esc(o)}</span><span class="cnt"></span></div>`).join("");
+  $("qsum").textContent = ""; $("next").textContent = "Close ▸";
+  show("play");
+  clearInterval(tick); $("timerWrap").classList.toggle("hidden", !tl);
+  if (tl){ deadline = Date.now() + tl * 1000; tick = setInterval(() => { const r = Math.max(0, deadline - Date.now()); $("timer").style.width = (100 * r / (tl * 1000)) + "%"; if (r <= 0) closeQ(); }, 200); }
+  updAns();
+}
+function counts(){ const c = [0,0,0,0]; Object.values(answers).forEach(v => { if (v >= 0 && v <= 3) c[v]++; }); return c; }
+function updAns(){
+  if (phase !== "question") return;
+  const n = Object.keys(answers).length; $("qans").textContent = `${n} / ${joined} answered`;
+  if (joined && n >= joined) closeQ();
+}
+async function closeQ(){
+  if (phase !== "question") return;
+  phase = "reveal"; clearInterval(tick);
+  const q = quiz[qi];
+  await Backend.update("rooms/" + room + "/state", { phase: "reveal", correct: q.shownCorrect });
+  const c = counts(), n = c.reduce((a, b) => a + b, 0);
+  [...$("opts").children].forEach((el, i) => {
+    el.querySelector(".bar").style.width = n ? (100 * c[i] / n) + "%" : "0";
+    el.querySelector(".cnt").textContent = `${c[i]} · ${n ? Math.round(100 * c[i] / n) : 0}%`;
+    el.classList.toggle("correct", i === q.shownCorrect); el.classList.toggle("dim", i !== q.shownCorrect);
+  });
+  const pc = n ? Math.round(100 * c[q.shownCorrect] / n) : 0;
+  $("qsum").innerHTML = n ? `<b>${pc}%</b> correct · ${n} answers` : "No answers";
+  // store per question, in ORIGINAL answer letters
+  const orig = [0,0,0,0]; q.order.forEach((o, i) => orig[o] = c[i]);
+  results.push({ id: q.id, pool: q.pool, category: q.category, chapter: q.chapter, question: q.question, opts: q.opts, correct: q.correct, counts: orig, n });
+ $("next").textContent = qi + 1 < quiz.length ? "Next ▸" : "Results ▸";
+}
+$("next").onclick = nextQ;
+document.addEventListener("keydown", e => { if ((e.code === "Space" || e.code === "ArrowRight") && !$("play").classList.contains("hidden")){ e.preventDefault(); nextQ(); } });
+
+// ---------- Results ----------
+function lvl(p){ return p < 50 ? "lvl-low" : p < 75 ? "lvl-mid" : "lvl-high"; }
+async function finish(){
+  phase = "end"; if (unsubA) unsubA();
+  await Backend.set("rooms/" + room + "/state", { phase: "end", total: quiz.length });
+  const tot = results.reduce((a, r) => a + r.n, 0), ok = results.reduce((a, r) => a + r.counts[r.correct], 0);
+  $("overall").textContent = tot ? `· ${Math.round(100 * ok / tot)}% correct` : "· no answers";
+  const cats = {};
+  results.forEach(r => { const c = (cats[r.category] ||= { ch: r.chapter, q: 0, n: 0, ok: 0 }); c.q++; c.n += r.n; c.ok += r.counts[r.correct]; });
+  const cr = Object.entries(cats).map(([k, v]) => ({ k, ...v, p: v.n ? Math.round(100 * v.ok / v.n) : null })).sort((a, b) => (a.p ?? 101) - (b.p ?? 101));
+  $("catTable").innerHTML = `<tr><th>Category</th><th>Ch</th><th>Qs</th><th colspan="2">Correct</th></tr>` + cr.map(c =>
+    `<tr><td>${esc(c.k)}</td><td>${esc(c.ch)}</td><td>${c.q}</td><td class="pct">${c.p == null ? "–" : c.p + "%"}</td><td style="width:35%"><div class="pbar"><div class="${lvl(c.p ?? 0)}" style="width:${c.p ?? 0}%"></div></div></td></tr>`).join("");
+  const miss = results.filter(r => r.n).map(r => { const p = Math.round(100 * r.counts[r.correct] / r.n); let w = -1; r.counts.forEach((v, i) => { if (i !== r.correct && (w < 0 || v > r.counts[w])) w = i; }); return { ...r, p, w }; })
+    .sort((a, b) => a.p - b.p).slice(0, 6);
+  $("missTable").innerHTML = `<tr><th>Question</th><th>Correct</th><th>Most chosen wrong</th></tr>` + miss.map(r =>
+    `<tr><td><b>${esc(r.id)}</b> ${esc(r.question)}<div class="warn-n">${esc(r.category)}</div></td><td class="pct">${r.p}%</td><td>${r.counts[r.w] ? `<b>${Math.round(100 * r.counts[r.w] / r.n)}%</b> ${esc(r.opts[r.w])}` : "–"}</td></tr>`).join("");
+  show("results");
+  try { const hist = JSON.parse(localStorage.getItem("pofcc-history") || "[]"); hist.push({ date: new Date().toISOString(), room, results }); localStorage.setItem("pofcc-history", JSON.stringify(hist.slice(-50))); } catch {}
+}
+$("csv").onclick = () => {
+  const d = new Date().toISOString().slice(0, 10);
+  const q = s => '"' + String(s).replace(/"/g, '""') + '"';
+  const lines = [["date","room","id","pool","category","chapter","question","answers","pct_correct","correct","n_A","n_B","n_C","n_D","most_chosen_wrong"].join(";")];
+  results.forEach(r => { let w = -1; r.counts.forEach((v, i) => { if (i !== r.correct && (w < 0 || v > r.counts[w])) w = i; });
+    lines.push([d, room, r.id, r.pool, r.category, r.chapter, r.question, r.n, r.n ? Math.round(100 * r.counts[r.correct] / r.n) : "", L[r.correct], ...r.counts, r.counts[w] ? L[w] : ""].map(q).join(";")); });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv" }));
+  a.download = `PoF_class_check_${d}_${room}.csv`; a.click();
+};
+$("del").onclick = async () => { try { await Backend.remove("rooms/" + room); $("del").textContent = "Room deleted ✓"; $("del").disabled = true; } catch(e){ $("del").textContent = "Delete failed: " + e.message; } };
+$("again").onclick = () => { room = null; $("hdrRoom").textContent = ""; $("del").disabled = false; $("del").innerHTML = "Close room &amp; delete data"; $("create").disabled = false; phase = ""; show("setup"); };
+
+// ---------- start ----------
+$("hdrMode").textContent = Backend.mode === "mock" ? "TEST MODE (this computer only)" : "";
+try { const t = localStorage.getItem("pofcc-bank"); if (t) loadBank(t, localStorage.getItem("pofcc-bank-name") || "saved bank"); } catch {}
+</script>
+</body>
+</html>

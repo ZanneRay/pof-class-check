@@ -1,0 +1,17 @@
+:root{
+  --olive:#334811;--dark:#2B371D;--light:#E7EBDC;--sand:#F2F0E6;--ink:#252A25;--mute:#686C65;
+  --line:#C9CDC3;--good:#2E7D32;--bad:#B23A2B;--bg:#FFFFFF;
+  --a:#1F5F8B;--b:#9F6119;--c:#5B3F6E;--d:#3E6B2F;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:"BundesSans Office","Segoe UI",Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%}
+button{font:inherit;cursor:pointer}
+.hidden{display:none!important}
+.btn{border:0;border-radius:8px;padding:.7em 1.2em;background:var(--olive);color:#fff;font-weight:700}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.ghost{background:transparent;color:var(--olive);border:2px solid var(--olive)}
+.btn.warn{background:var(--bad)}
+.mute{color:var(--mute)}
+.opt-a{--c1:var(--a)}.opt-b{--c1:var(--b)}.opt-c{--c1:var(--c)}.opt-d{--c1:var(--d)}
+.letter{display:inline-flex;align-items:center;justify-content:center;width:1.9em;height:1.9em;border-radius:6px;background:var(--c1);color:#fff;font-weight:800;flex:none}
